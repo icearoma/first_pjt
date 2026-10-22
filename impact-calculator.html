@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>통상임금 감소액 계산기</title>
+<style>
+  :root { font-family: system-ui, -apple-system, "Malgun Gothic", sans-serif; color: #172033; background: #f4f6fa; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 24px 14px; }
+  main { max-width: 860px; margin: 0 auto; }
+  .card { background: white; border: 1px solid #e0e5ee; border-radius: 16px; padding: 22px; margin-bottom: 16px; box-shadow: 0 4px 16px rgba(20,35,60,.04); }
+  h1 { margin: 0 0 8px; font-size: clamp(1.5rem, 4vw, 2rem); }
+  h2 { font-size: 1.12rem; margin: 0 0 16px; }
+  p { line-height: 1.55; }
+  .muted { color: #647084; font-size: .9rem; }
+  .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+  label { display: block; font-weight: 650; font-size: .92rem; margin-bottom: 6px; }
+  input { width: 100%; padding: 11px 12px; border: 1px solid #cbd3df; border-radius: 9px; font: inherit; }
+  input:focus { outline: 2px solid #9bbcff; border-color: #386bd8; }
+  .hero { background: #edf3ff; border-radius: 12px; padding: 18px; }
+  .hero .amount { font-size: clamp(1.7rem, 5vw, 2.3rem); font-weight: 800; color: #153e91; margin: 5px 0; }
+  .results { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; }
+  .metric { border: 1px solid #e2e7ef; border-radius: 12px; padding: 14px; }
+  .metric .value { font-weight: 750; font-size: 1.15rem; margin-top: 5px; overflow-wrap: anywhere; }
+  table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+  th, td { text-align: right; padding: 11px 8px; border-bottom: 1px solid #e7ebf2; }
+  th { background: #f7f9fc; font-size: .88rem; }
+  th:first-child, td:first-child { text-align: left; }
+  button { border: 0; border-radius: 9px; padding: 11px 15px; font: inherit; font-weight: 700; cursor: pointer; }
+  .primary { background: #1d4ed8; color: white; }
+  .secondary { background: #e9edf5; color: #172033; }
+  .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+  .note { border-left: 4px solid #e0a52b; background: #fff9e9; padding: 12px 14px; border-radius: 6px; }
+  @media (max-width: 560px) { .grid, .results { grid-template-columns: 1fr; } .card { padding: 16px; } th, td { padding: 9px 5px; font-size: .88rem; } }
+  @media print { body { background: white; } .card { box-shadow: none; break-inside: avoid; } .actions { display: none; } }
+</style>
+</head>
+<body>
+<main>
+  <section class="card">
+    <h1>통상임금 감소액 계산기</h1>
+    <p class="muted">통상임금이 감소할 때 고정OT·연차수당 및 퇴직금의 참고 감소액을 계산합니다. 모든 결과는 세전 추정치입니다.</p>
+  </section>
+
+  <section class="card">
+    <h2>① 계산 조건</h2>
+    <div class="grid">
+      <div><label for="annual">연간 통상임금 감소액 (원)</label><input id="annual" type="number" min="0" step="10000" value="1000000"></div>
+      <div><label for="divisor">통상시급 산정 시간 (시간)</label><input id="divisor" type="number" min="1" step="1" value="243"></div>
+      <div><label for="otHours">월 고정OT 시간</label><input id="otHours" type="number" min="0" step="0.5" value="22"></div>
+      <div><label for="otRate">고정OT 가산율</label><input id="otRate" type="number" min="0" step="0.1" value="1.5"></div>
+      <div><label for="leaveDays">연차수당 지급 대상 일수</label><input id="leaveDays" type="number" min="0" step="1" value="7"></div>
+      <div><label for="dayHours">1일 소정근로시간</label><input id="dayHours" type="number" min="0" step="0.5" value="8"></div>
+      <div><label for="tenure">퇴직금 근속연수 (년)</label><input id="tenure" type="number" min="0" step="0.5" value="18"></div>
+      <div><label for="includeBase">통상임금 감소액 포함</label><input id="includeBase" value="포함 (고정)" disabled></div>
+    </div>
+    <div class="actions">
+      <button class="primary" id="recalc">다시 계산</button>
+      <button class="secondary" id="reset">기본값 초기화</button>
+      <button class="secondary" id="copy">결과 복사</button>
+      <button class="secondary" onclick="window.print()">인쇄 / PDF 저장</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>② 월·연간 임금 감소 추정</h2>
+    <div class="hero">
+      <div class="muted">연간 합계 (통상임금 + 고정OT + 연차수당)</div>
+      <div class="amount" id="annualTotal">-</div>
+      <div class="muted" id="monthlyTotal">월평균 -</div>
+    </div>
+    <div class="results" style="margin-top:12px">
+      <div class="metric"><div class="muted">통상시급 감소액</div><div class="value" id="hourly">-</div></div>
+      <div class="metric"><div class="muted">고정OT 월 감소액</div><div class="value" id="otMonthly">-</div></div>
+      <div class="metric"><div class="muted">고정OT 연 감소액</div><div class="value" id="otAnnual">-</div></div>
+      <div class="metric"><div class="muted">연차수당 1일 감소액</div><div class="value" id="leaveOne">-</div></div>
+      <div class="metric"><div class="muted">연차수당 연 감소액</div><div class="value" id="leaveAnnual">-</div></div>
+      <div class="metric"><div class="muted">통상임금 월 감소액</div><div class="value" id="baseMonthly">-</div></div>
+    </div>
+    <table>
+      <thead><tr><th>항목</th><th>월 감소액</th><th>연 감소액</th></tr></thead>
+      <tbody>
+        <tr><td>통상임금</td><td id="tBaseM">-</td><td id="tBaseY">-</td></tr>
+        <tr><td>고정OT</td><td id="tOtM">-</td><td id="tOtY">-</td></tr>
+        <tr><td>연차수당</td><td id="tLeaveM">-</td><td id="tLeaveY">-</td></tr>
+        <tr><th>합계</th><th id="tTotalM">-</th><th id="tTotalY">-</th></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="card">
+    <h2>③ 퇴직금 감소 참고치</h2>
+    <div class="results">
+      <div class="metric"><div class="muted">근속 1년당 단순 추정치</div><div class="value" id="sevYear">-</div></div>
+      <div class="metric"><div class="muted">입력 근속연수 기준 단순 추정치</div><div class="value" id="sevTotal">-</div></div>
+    </div>
+    <p class="muted">이 퇴직금 계산은 (월 통상임금 감소액 + 월 고정OT 감소액) × 근속연수로 단순 환산한 참고치입니다. 실제 퇴직금은 퇴직 전 3개월 평균임금, 퇴직급여 산정에 포함되는 임금 항목 및 실제 근속기간 등에 따라 달라집니다. 법정 퇴직금의 확정 계산으로 사용하지 마세요.</p>
+  </section>
+
+  <section class="card note">
+    <strong>중요한 유의사항</strong>
+    <p>243시간은 사용자가 지정한 회사 산정 기준입니다. 법정 연장근로수당·연차수당 계산에 이 기준을 적용할 수 있는지는 임금체계와 관련 법령에 따라 별도로 확인해야 합니다. 고정OT 감소액은 실제로 통상시급에 연동해 지급액을 산정하는 경우에만 적용됩니다. 연차수당은 입력한 일수가 실제 수당 지급 대상이라는 가정입니다. 이 페이지는 입력값을 서버로 전송하거나 저장하지 않습니다.</p>
+  </section>
+</main>
+<script>
+(() => {
+  const ids = ["annual","divisor","otHours","otRate","leaveDays","dayHours","tenure"];
+  const el = id => document.getElementById(id);
+  const num = id => Math.max(0, Number(el(id).value) || 0);
+  const won = value => Math.round(value).toLocaleString("ko-KR") + "원";
+  const set = (id, value) => { el(id).textContent = value; };
+
+  function calculate() {
+    const annual = num("annual");
+    const divisor = num("divisor");
+    const otHours = num("otHours");
+    const otRate = num("otRate");
+    const leaveDays = num("leaveDays");
+    const dayHours = num("dayHours");
+    const tenure = num("tenure");
+
+    if (divisor <= 0) {
+      alert("통상시급 산정 시간은 1 이상이어야 합니다.");
+      el("divisor").focus();
+      return;
+    }
+
+    const baseMonthly = annual / 12;
+    const hourly = baseMonthly / divisor;
+    const otMonthly = hourly * otHours * otRate;
+    const otAnnual = otMonthly * 12;
+    const leaveOne = hourly * dayHours;
+    const leaveAnnual = leaveOne * leaveDays;
+    const totalAnnual = annual + otAnnual + leaveAnnual;
+    const severancePerYear = baseMonthly + otMonthly;
+    const severanceTotal = severancePerYear * tenure;
+
+    set("hourly", won(hourly));
+    set("baseMonthly", won(baseMonthly));
+    set("otMonthly", won(otMonthly));
+    set("otAnnual", won(otAnnual));
+    set("leaveOne", won(leaveOne));
+    set("leaveAnnual", won(leaveAnnual));
+    set("annualTotal", won(totalAnnual));
+    set("monthlyTotal", "월평균 " + won(totalAnnual / 12));
+    set("tBaseM", won(baseMonthly));
+    set("tBaseY", won(annual));
+    set("tOtM", won(otMonthly));
+    set("tOtY", won(otAnnual));
+    set("tLeaveM", won(leaveAnnual / 12));
+    set("tLeaveY", won(leaveAnnual));
+    set("tTotalM", won(totalAnnual / 12));
+    set("tTotalY", won(totalAnnual));
+    set("sevYear", won(severancePerYear));
+    set("sevTotal", won(severanceTotal));
+  }
+
+  el("recalc").addEventListener("click", calculate);
+  ids.forEach(id => el(id).addEventListener("input", calculate));
+  el("reset").addEventListener("click", () => {
+    const defaults = {annual:1000000, divisor:243, otHours:22, otRate:1.5, leaveDays:7, dayHours:8, tenure:18};
+    Object.entries(defaults).forEach(([id, value]) => { el(id).value = value; });
+    calculate();
+  });
+  el("copy").addEventListener("click", async () => {
+    const text = [
+      "통상임금 감소액 계산 결과",
+      "연간 통상임금 감소액: " + el("tBaseY").textContent,
+      "통상시급 감소액: " + el("hourly").textContent,
+      "고정OT 월 감소액: " + el("otMonthly").textContent,
+      "고정OT 연 감소액: " + el("otAnnual").textContent,
+      "연차수당 1일 감소액: " + el("leaveOne").textContent,
+      "연차수당 연 감소액: " + el("leaveAnnual").textContent,
+      "연간 임금 감소 추정액: " + el("annualTotal").textContent,
+      "월평균 임금 감소 추정액: " + el("monthlyTotal").textContent,
+      "퇴직금 근속 1년당 단순 추정치: " + el("sevYear").textContent,
+      "퇴직금 근속연수 기준 단순 추정치: " + el("sevTotal").textContent
+    ].join("\n");
+    try {
+      await navigator.clipboard.writeText(text);
+      alert("계산 결과를 복사했습니다.");
+    } catch (e) {
+      window.prompt("아래 결과를 복사하세요:", text);
+    }
+  });
+  calculate();
+})();
+</script>
+</body>
+</html>
